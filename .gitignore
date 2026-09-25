@@ -1,0 +1,10 @@
+# Agda build artifacts
+*.agdai
+_build/
+MAlonzo/
+
+# Editor / OS
+.DS_Store
+*~
+\#*\#
+.\#*
