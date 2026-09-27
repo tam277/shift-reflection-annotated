@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>shift/resetを含む型付き言語におけるReflection証明</title>
+<style>
+  body { max-width: 50em; margin: 2em auto; padding: 0 1em; line-height: 1.7; font-family: sans-serif; }
+  h1 { font-size: 1.4em; }
+  ul ul { margin: 0; }
+  code { font-family: monospace; }
+  .note { color: #555; font-size: 0.9em; }
+</style>
+</head>
+<body>
+
+<h1>shift/resetを含む型付き言語におけるReflection証明</h1>
+
+<p>PPL 2023 の論文</p>
+<blockquote>
+  本田 華歩、山本充子、浅井 健一<br>
+  「shift/resetを含む型付き言語におけるReflection証明」<br>
+  第２５回プログラミングおよびプログラミング言語ワークショップ論文集、20 ページ (2023 年 3 月)。
+</blockquote>
+<p>
+  で行った証明のソースコードに、解説コメントを付けたものです。
+  （論文中で記述したものに加え、<code>Sk.e</code> の形の shift が入っても reflection が成り立つことも証明しています。）
+</p>
+
+<p class="note">
+  各ファイルのページは、<code>agda --html Reflect.agda</code> で <code>html/</code> に生成されます。
+  リンクが開けない場合は、先にこのコマンドを実行してください。
+</p>
+
+<h2>ファイル一覧</h2>
+<ul>
+  <li><a href="html/Reflect.html">Reflect.agda</a> 全体をまとめたファイル
+    <ul>
+      <li><a href="html/Extensionality.html">Extensionality.agda</a> 関数の外延性の公理</li>
+      <li><a href="html/DSterm.html">DSterm.agda</a> DS 言語</li>
+      <li><a href="html/DStermK.html">DStermK.agda</a> DSKernel 言語</li>
+      <li><a href="html/CPSterm.html">CPSterm.agda</a> CPS 言語</li>
+      <li><a href="html/Embed.html">Embed.agda</a> DS 言語 - DSKernel 言語間の変換</li>
+      <li><a href="html/DSTrans.html">DSTrans.agda</a> DSKernel 言語 - CPS 言語間の変換</li>
+      <li><a href="html/CPSColonTrans.html">CPSColonTrans.agda</a> DS 言語 - CPS 言語間の変換</li>
+    </ul>
+  </li>
+  <li><a href="html/Reflect1.html">Reflect1.agda</a> Reflection (1) の証明。DS - CPS
+    <ul>
+      <li><a href="html/Reflect1a.html">Reflect1a.agda</a> DS - DSKernel</li>
+      <li><a href="html/Reflect1b.html">Reflect1b.agda</a> DSKernel - CPS</li>
+    </ul>
+  </li>
+  <li><a href="html/Reflect2.html">Reflect2.agda</a> Reflection (2) の証明。CPS - DS
+    <ul>
+      <li><a href="html/Reflect2a.html">Reflect2a.agda</a> CPS - DSKernel</li>
+      <li><a href="html/Reflect2b.html">Reflect2b.agda</a> DSKernel - DS</li>
+    </ul>
+  </li>
+  <li><a href="html/Reflect3.html">Reflect3.agda</a> Reflection (3) の証明。DS → CPS
+    <ul>
+      <li><a href="html/Reflect3a.html">Reflect3a.agda</a> DS → DSKernel</li>
+      <li><a href="html/Reflect3b.html">Reflect3b.agda</a> DSKernel → CPS</li>
+    </ul>
+  </li>
+  <li><a href="html/Reflect4.html">Reflect4.agda</a> Reflection (4) の証明。CPS → DS
+    <ul>
+      <li><a href="html/Reflect4a.html">Reflect4a.agda</a> CPS → DSKernel</li>
+      <li><a href="html/Reflect4b.html">Reflect4b.agda</a> DSKernel → DS</li>
+    </ul>
+  </li>
+  <li><a href="html/DecomposeColon.html">DecomposeColon.agda</a> コロン変換が A-正規形変換と（DSKernel 用の）CPS 変換の合成になることの証明</li>
+</ul>
+
+</body>
+</html>

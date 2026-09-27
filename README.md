@@ -22,6 +22,7 @@ shift が入っても reflection が成り立つことも証明している。�
 ## ファイル構成
 
 - [README.md](README.md) このファイル
+- [index.html](index.html) HTML で見るときの入口（ファイル一覧）
 - [Reflect.agda](Reflect.agda) 全体をまとめたファイル
   - [Extensionality.agda](Extensionality.agda) 関数の外延性の公理
   - [DSterm.agda](DSterm.agda) DS 言語
@@ -76,7 +77,10 @@ agda --html Reflect.agda
 ```
 
 - `Reflect.agda` から import されているモジュールがすべて型検査され、`html/` ディレクトリに出力されます。
-- `html/Reflect.html` をブラウザで開くと、そこから各モジュールをたどれます。
-- 出力先は `--html-dir=DIR` で変えられます。
+- 生成したあと、リポジトリ直下の `index.html` をブラウザで開くと、ファイル一覧から各ファイルのページに移れます。
+  ```bash
+  open index.html
+  ```
+- `index.html` は `html/` の中のページにリンクしているので、出力先（`--html-dir`）は変えずに生成してください。
 - 型検査が通らないと HTML は出力されません。
 - `html/` は各自の手元で生成するものなので、`.gitignore` でコミット対象から外しています。
