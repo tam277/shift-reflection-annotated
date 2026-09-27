@@ -1,3 +1,22 @@
+{-
+  ============================================================================
+  DS 項と DSKernel 項の間の Reflection (4)  (論文 4 節, 付録 B.4)
+  ============================================================================
+  DSKernel 言語の簡約が、DS 言語に埋め込んだ後の DS 言語の簡約で保たれることを示す。
+  論文の 定理 27 にあたる。
+    correctVE : 任意の値 V, W について       V ⟶* W ならば V⊙ ⟶* W⊙
+    correctE  : 任意の項 MΔ, NΔ について   MΔ ⟶* NΔ ならば (MΔ)⊕ ⟶* (NΔ)⊕
+    correctCE : 任意の継続 JΔ, KΔ について JΔ ⟶* KΔ ならば、
+                任意の DS 言語の項 M について (JΔ)⊖[M] ⟶* (KΔ)⊖[M]
+  そのために、次の仮定と補題を使っている。
+    lemma-Var-SubstK                  : 変数を自分自身で置き換える仮定 (論文 仮定 23)
+    lemma-SubstV, lemma-Subst,
+    lemma-SubstC                      : 値の代入補題 (論文 補題 25)
+    lemmaPlugSubst                    : 継続の代入についての補題 (論文 補題 26)
+  （論文 補題 24 は、DSterm.agda の substPlug。）
+  ============================================================================
+-}
+
 {-# OPTIONS --rewriting #-}
 
 module Reflect4b where
@@ -10,14 +29,36 @@ open import Data.Product
 open import Function
 open import Relation.Binary.PropositionalEquality
 
--- postulate
+{-
+  ----------------------------------------------------------------------------
+  仮定 (論文 仮定 5, 仮定 23)
+  ----------------------------------------------------------------------------
+  任意の DSKernel 言語の項 MΔ について MΔ[x:=x] = MΔ。
+  MΔ の中の変数 x を x 自身で置き換えたら MΔ になる、という自明な命題だが、
+  PHOAS では MΔ が λ 抽象の下に隠れていて場合分けできないため、証明できない。
+  そのため postulate で仮定している（論文 p.13）。
+  MΔ が具体的に与えられれば、Agda で示すことは簡単にできる。
+  correctCE の (η.let) の場合で使う。
+-}
+
 postulate
   lemma-Var-SubstK : {var : typK → Set} {τ₃ τ₄ : typK} {Δ : conttypK}
                      {e : var τ₃ → termK[ var , Δ ] τ₄} →
                      {x : var τ₃} →
                      SubstK e (Var x) (e x)
 
--- substitution lemma
+{-
+  ----------------------------------------------------------------------------
+  値の代入補題 (論文 補題 25)
+  ----------------------------------------------------------------------------
+  代入してから埋め込んでも、埋め込んでから代入しても同じになる。
+    lemma-SubstV : (W[x:=V])⊙ = W⊙[x:=V⊙]
+    lemma-Subst  : (M[x:=V])⊕ = M⊕[x:=V⊙]
+    lemma-SubstC : (KΔ[x:=V])⊖ = (KΔ)⊖[x:=V⊙]
+  いずれも代入関係として述べていて、証明は代入関係についての相互帰納法。
+  項の場合は、DSterm.agda の substPlug（論文 補題 24）を使う。
+-}
+
 mutual
   lemma-SubstV : {var : typ → Set} → {τ₁ τ₂ : typK} →
                  {v₁ : (var ∘ embedT) τ₁ →
@@ -68,6 +109,20 @@ mutual
     sLet sHole (λ x → lemma-Subst (sub x))
   lemma-SubstC {Δ = • τ} (sKLet sub) =
     sLet sHole (λ x → lemma-Subst (sub x))
+
+{-
+  ----------------------------------------------------------------------------
+  継続の代入についての補題 (論文 補題 26)
+  ----------------------------------------------------------------------------
+  Mk[k:=c] = M′ ならば c⊖[(Mk)⊕] ⟶* M′⊕
+  つまり、継続の代入をしてから埋め込んだものは、
+  埋め込んだ Mk を、埋め込んだ c の穴に入れたものから簡約で得られる。
+  c が []k, []•, let x = [] in N のどれかで、3 つの補題に分けている。
+    lemmaReduceEmbedKVar : c = []k の場合
+    lemmaReduceEmbedKId  : c = []• の場合
+    lemmaReduceEmbedKLet : c = let x = [] in N の場合（(assoc) 規則を使う）
+  lemmaPlugSubst は、これらを c で場合分けしてまとめたもの。
+-}
 
 -- following 3 lemma used in lemmaPlugSubst below
 lemmaReduceEmbedKVar : {var : typ → Set} {τ₁ τ₂ τ₃ : typK}
@@ -182,7 +237,17 @@ lemmaPlugSubst {Δ₂ = K x ▷ x₁} {c = KLet e₂} sub =
 lemmaPlugSubst {Δ₂ = • x} {c = KLet e₂} sub =
   lemmaReduceEmbedKLet sub (refl , refl)
 
--- main theorem
+{-
+  ----------------------------------------------------------------------------
+  主定理 (論文 定理 27)
+  ----------------------------------------------------------------------------
+  簡約 ReduceVK, ReduceK, ReduceCK についての相互帰納法。
+  DSKernel 言語の各簡約規則を、対応する DS 言語の簡約規則に置き換える。
+  埋め込んだ項は plug (embedC k) … の形をしているので、
+  reducePlug で穴の中の簡約に持ち込むことが多い。
+  (β.v) の場合は、値の代入補題と lemmaPlugSubst（継続の代入）を組み合わせる。
+-}
+
 mutual
   correctVE : {var : typ → Set} {τ₁ : typK} {β : typ}
               {v v' : valueK[ var ∘ embedT ] τ₁}
@@ -239,6 +304,8 @@ mutual
               {e : term[ var , embedT τ₃ ▷ embedT τ₄ ] embedT τ₅} →
               Reduce {var} (plug (embedC k) e)
                            (plug (embedC k') e)
+  -- (η.let) の場合。
+  -- K が let x = [] in N の場合は、(β.let) と仮定 lemma-Var-SubstK を使う。
   correctCE (REtaLet KVar) = REtaLet _
   correctCE (REtaLet KId) = REtaLet _
   correctCE {τ₃ = τ₃} {Δ = K τ₁ ▷ τ₂} (REtaLet (KLet e₂)) =

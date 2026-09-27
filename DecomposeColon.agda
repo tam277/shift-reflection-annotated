@@ -1,3 +1,19 @@
+{-
+  ============================================================================
+  コロン変換の分解 (論文 1.1 節)
+  ============================================================================
+  コロン変換 (CPSColonTrans.agda の cpsE𝑐) が、
+  A-正規形変換 (Embed.agda の knormal) と、
+  DSKernel 言語用の CPS 変換 (DSTrans.agda の cpsE) の合成になることを証明する。
+  つまり、従来の CPS 変換は
+    DS 言語 --A-正規形変換--> DSKernel 言語 --CPS 変換--> CPS 言語
+  と分解できる（論文 p.2 の図）。
+  Reflect.agda の最後で import されている。
+  （このファイルの REWRITE 規則が Reflect3.agda で解けない制約を生むため、
+  最後に import する必要がある、と Reflect.agda に書かれている。）
+  ============================================================================
+-}
+
 {-# OPTIONS --rewriting #-}
 
 module DecomposeColon where
@@ -17,7 +33,16 @@ open import Relation.Binary.PropositionalEquality
 
 open import Extensionality
 
--- for REWRITE
+{-
+  ----------------------------------------------------------------------------
+  型の変換についての REWRITE 規則
+  ----------------------------------------------------------------------------
+  コロン変換の型の変換 CPSColonTrans.cpsT が、
+  A-正規形変換の型の変換 knormalT と、DSTrans.cpsT の合成に等しいことを示し、
+  REWRITE プラグマで、書き換え規則として登録している。
+  （名前は cpsE∘knormalT だが、項ではなく型についての等式。）
+-}
+
 open import Agda.Builtin.Equality
 open import Agda.Builtin.Equality.Rewrite
 
@@ -31,7 +56,24 @@ cpsE∘knormalT (τ ⇒ τ₁ cps[ τ₂ , τ₃ ])
 
 {-# REWRITE cpsE∘knormalT #-}
 
---main theorem
+{-
+  ----------------------------------------------------------------------------
+  主定理
+  ----------------------------------------------------------------------------
+    correctV : 値 v について       v† = (v††)†′
+                                   （cpsV𝑐 v ≡ cpsV (knormalV v)）
+    correct  : 項 e と、DSKernel 言語のコンテキスト k について
+                                   e : k‡ = (e :: k)°
+                                   （cpsE𝑐 e (cpsC k) ≡ cpsE (knormal e k)）
+  証明は v, e についての相互帰納法。
+  コロン変換と A-正規形変換は同じ形の規則で定義されているので、
+  各場合とも、帰納法の仮定を使って両辺をそろえるだけでよい。
+  λ 抽象や let の本体では、関数の外延性の公理を使っている。
+
+  App (NonVal e₁) (NonVal e₂) と Let (NonVal e₁) e₂ の場合は、
+  Δ が K _ ▷ _ か • _ かで場合分けしているが、両者の証明は同じ。
+  （Δ の形が決まらないと、計算が進まないため。）
+-}
 
 mutual
   correctV : {var : cpstyp → Set} →
@@ -144,6 +186,21 @@ mutual
     ≡⟨ eq₁ _ ⟩
       cpsE (knormal (NonVal e₁) (KLet (λ m → knormal (e₂ m) k)))
     ∎ where open ≡-Reasoning
+
+{-
+  ----------------------------------------------------------------------------
+  CPS 言語の継続を使った形
+  ----------------------------------------------------------------------------
+  CPS 言語の継続 k について、
+    ((k♭)⊖[e] :: []k)° = e : k    （maincorrectC）
+    ((k♭)⊖[e] :: []•)° = e : k    （maincorrectC2）
+  が成り立つことを示す。
+  つまり、DS 変換して埋め込んだコンテキストに e を plug し、A-正規形変換して CPS 変換したものは、
+  e : k に等しい。
+  Reflect2b.agda の correctC, correctC2 と、Reflect2a.agda の correctC を組み合わせている。
+    maincorrectC  : k が k を使う継続 (Δ = K α ⇒ β) の場合
+    maincorrectC2 : k が恒等継続の下の継続 (Δ = • γ) の場合
+-}
 
 maincorrectC : {var : cpstyp → Set} {τ τ₁ τ₂ α β : cpstyp} →
                (k : cpscont[ var , K α ⇒ β , τ₁ ] τ₂) →

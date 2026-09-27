@@ -1,3 +1,20 @@
+{-
+  ============================================================================
+  CPS 言語 (論文 2.2 節)
+  ============================================================================
+  CPS 変換の変換先となる、継続渡し形式の言語（CPS 言語、論文では λcS*）を定義するファイル。
+  以下を順に定義している。
+    ・型と継続の型                       (論文 p.5, 図 3)
+    ・項・値・継続                       (論文 p.5, 図 3。型規則は p.6, 図 4)
+    ・インタプリタ
+    ・代入関係（値の代入と、継続の代入）
+    ・簡約規則                            (論文 p.5, 図 3)
+    ・簡約の等式推論用の記法と補題
+  DStermK.agda の DSKernel 言語とは、コンストラクタが一対一に対応している。
+  （DSKernel 言語の説明も合わせて読むと分かりやすい。）
+  ============================================================================
+-}
+
 module CPSterm where
 
 open import Data.Nat
@@ -5,7 +22,21 @@ open import Data.Product
 open import Function
 open import Relation.Binary.PropositionalEquality
 
--- target type
+{-
+  ----------------------------------------------------------------------------
+  型の定義 (p.5, 図 3)
+  ----------------------------------------------------------------------------
+  論文の記法との対応:
+    Nat                  : int
+    τ₂ ⇒[ τ₁ ⇒ τ₃ ]⇒ τ₄ : τ₂ → (τ₁ → τ₃) → τ₄
+  関数は、τ₂ 型の引数と τ₁ → τ₃ 型の継続を受け取り、τ₄ 型の答えを返す。
+
+  継続の型 conttyp は、論文の Δ と δ を合わせたものにあたる。
+    K τ₁ ⇒ τ₂ : Δ = k の場合。継続の型は τ₁ →k τ₂。
+    • τ       : Δ = • の場合。継続の型は τ →• τ（恒等継続 λx.x の型）。
+  k は継続を表す特別な定数、• は恒等継続を表す（論文 p.5）。
+-}
+
 mutual
   data cpstyp : Set where
     Nat : cpstyp
@@ -15,46 +46,76 @@ mutual
     K_⇒_ : cpstyp → cpstyp → conttyp
     •_ : cpstyp → conttyp
 
+-- Δ-cpstype Δ τ₁ τ₂ : 継続の型 Δ が、τ₁ を受け取って τ₂ を返す継続の型であること。
+-- （現在は他のファイルでは使われていない）
 Δ-cpstype : conttyp → cpstyp → cpstyp → Set
 Δ-cpstype (K τ₁′ ⇒ τ₂′) τ₁ τ₂ = τ₁′ ≡ τ₁ × τ₂′ ≡ τ₂
 Δ-cpstype (• τ) τ₁ τ₂ = τ ≡ τ₁ × τ ≡ τ₂
 
--- CPS terms
+{-
+  ----------------------------------------------------------------------------
+  項の定義 (p.5, 図 3。型規則は p.6, 図 4)
+  ----------------------------------------------------------------------------
+  論文の構文との対応:
+    terms         MΔ   ::= KΔ V | V W KΔ | KΔ M•
+    values        V, W  ::= x | λx.λk.Mk | S
+    continuations KΔ   ::= k | λx.x | λx.MΔ
+  すべての部分式に名前が付いている形で、V や W は値でなければならない（論文 p.5）。
+
+  型との対応:
+    cpsvalue[ var ] τ              : 値   (論文の Γ ⊢v V : τ)
+    cpsterm[ var , Δ ] τ           : 項   (論文の Γ [Δ : δ] ⊢ MΔ : τ)
+    cpscont[ var , Δ , τ₁ ] τ₂     : 継続 (論文の Γ [Δ : δ] ⊢k KΔ : τ₁ → τ₂)
+  k は変数ではなく特別な定数として扱い、PHOAS の var には含めない。
+  k の型は、型環境の代わりに Δ として引き回している（論文 p.6）。
+-}
+
 mutual
   data cpsvalue[_]_ (var : cpstyp → Set) : cpstyp → Set where
-    -- x
+    -- x。(TVAR)
     CPSVar : {τ₁ : cpstyp} → (x : var τ₁) → cpsvalue[ var ] τ₁
     -- n
     CPSNum : (n : ℕ) → cpsvalue[ var ] Nat
-    -- λx.λk.M
+    -- λx.λk.M。(TFUN)
+    -- 継続 k は PHOAS の変数ではないので、Agda の関数が受け取るのは x だけ。
+    -- 本体 Mk の型 cpsterm[ var , K τ₁ ⇒ τ₃ ] が、k の型 τ₁ →k τ₃ を保持している。
     CPSFun : {τ₁ τ₂ τ₃ τ₄ : cpstyp} →
              (e : var τ₂ → cpsterm[ var , K τ₁ ⇒ τ₃ ] τ₄) →
              cpsvalue[ var ] (τ₂ ⇒[ τ₁ ⇒ τ₃ ]⇒ τ₄)
-    -- S
+    -- S。(TSHIFT)
+    -- DS 言語の S を CPS 変換して得られる項
+    --   S = λw.λj.w (λy.λk.k (j y)) (λx.x)
+    -- を表す定数（論文 p.5）。
     CPSShift : {τ₁ τ₂ τ₃ τ₄ τ₅ : cpstyp} →
              cpsvalue[ var ]
              (((τ₁ ⇒[ τ₂ ⇒ τ₃ ]⇒ τ₃) ⇒[ τ₄ ⇒ τ₄ ]⇒ τ₅)
               ⇒[ τ₁ ⇒ τ₂ ]⇒ τ₅)
 
   data cpsterm[_,_]_ (var : cpstyp → Set) : conttyp → cpstyp → Set where
-    -- K V
+    -- KΔ V。(TVAL)
+    -- 値 V を継続 KΔ に渡す。
     CPSRet : {τ₁ τ₂ : cpstyp} → {Δ : conttyp} →
              (k : cpscont[ var , Δ , τ₁ ] τ₂) →
              (v : cpsvalue[ var ] τ₁) →
              cpsterm[ var , Δ ] τ₂
-    -- V W K
+    -- V W KΔ。(TAPP)
+    -- 関数 V を、引数 W と継続 KΔ で呼び出す。
     CPSApp : {τ₁ τ₂ τ₃ τ₄ : cpstyp} → {Δ : conttyp} →
              (v : cpsvalue[ var ] (τ₂ ⇒[ τ₁ ⇒ τ₃ ]⇒ τ₄)) →
              (w : cpsvalue[ var ] τ₂) →
              (k : cpscont[ var , Δ , τ₁ ] τ₃) →
              cpsterm[ var , Δ ] τ₄
-    -- (Sk.M) K
+    -- (Sk.M) KΔ。
+    -- DS 言語の special form の shift Sk.M を CPS 変換したもの（論文には無い）。
+    -- 本体 M は、継続の型 τ₄ →k τ₄ の下で型が付く。
     CPSShift2 : {τ₁ τ₂ τ₃ τ₄ τ₅ : cpstyp} → {Δ : conttyp} →
              (e : var (τ₁ ⇒[ τ₂ ⇒ τ₃ ]⇒ τ₃) →
                   cpsterm[ var , K τ₄ ⇒ τ₄ ] τ₅) →
              (k : cpscont[ var , Δ , τ₁ ] τ₂) →
              cpsterm[ var , Δ ] τ₅
-    -- K M
+    -- KΔ M•。(TRESET)
+    -- reset を CPS 変換した結果で、M• の結果を直接形式で継続 KΔ に渡している。
+    -- ここで継続が区切られている（論文 p.5）。
     CPSRetE : {τ τ₁ τ₂ : cpstyp} → {Δ : conttyp} →
              (k : cpscont[ var , Δ , τ₁ ] τ₂) →
              (e : cpsterm[ var , • τ ] τ₁) →
@@ -62,24 +123,41 @@ mutual
 
   data cpscont[_,_,_]_ (var : cpstyp → Set) :
        conttyp → cpstyp → cpstyp → Set where
-    -- k
+    -- 継続を表す定数 k。(TKVAR)
     CPSKVar : {τ₁ τ₂ : cpstyp} →
               cpscont[ var , K τ₁ ⇒ τ₂ , τ₁ ] τ₂
-    -- λx.x
+    -- 恒等継続 λx.x。(TKID)
     CPSKId  : {τ₁ : cpstyp} →
               cpscont[ var , • τ₁ , τ₁ ] τ₁
-    -- λx.M
+    -- 継続 λx.MΔ。(TKLET)
     CPSKLet : {τ₁ τ₂ : cpstyp} → {Δ : conttyp} →
               (e : var τ₁ → cpsterm[ var , Δ ] τ₂) →
               cpscont[ var , Δ , τ₁ ] τ₂
 
--- example
+{-
+  ----------------------------------------------------------------------------
+  項の例
+  ----------------------------------------------------------------------------
+-}
+
 -- λx.λk.k x
 val1 : {var : cpstyp → Set} → {τ₁ τ₂ : cpstyp} →
        cpsvalue[ var ] (τ₁ ⇒[ τ₁ ⇒ τ₂ ]⇒ τ₂)
 val1 = CPSFun (λ x → CPSRet CPSKVar (CPSVar x))
 
--- interpreter
+{-
+  ----------------------------------------------------------------------------
+  インタプリタ
+  ----------------------------------------------------------------------------
+  DStermK.agda のインタプリタと同じ形をしている。
+    〚 τ 〛   : 型 τ の意味
+    〚 Δ 〛'  : 継続の型 Δ の意味（継続を表す Agda の関数の型）
+    gv v      : 値 v の意味
+    g e Δ     : 項 e を、継続 Δ の下で実行した結果
+    gc k Δ    : 継続 k の意味
+  g と gc の引数 Δ は、継続の型ではなく、k に与える継続そのもの（〚 Δ 〛' 型の値）である。
+-}
+
 〚_〛 : cpstyp → Set
 〚 Nat 〛 = ℕ
 〚 τ₂ ⇒[ τ₁ ⇒ τ₃ ]⇒ τ₄ 〛 =
@@ -110,8 +188,21 @@ mutual
   gc CPSKId Δ = λ x → x
   gc (CPSKLet e) Δ = λ x → g (e x) Δ
 
--- 値による代入規則
+{-
+  ----------------------------------------------------------------------------
+  値の代入 M[x:=V]
+  ----------------------------------------------------------------------------
+  DSterm.agda の代入と同じく、関係として定義している。
+    cpsSubstV v₁ v v₂ : v₁[x:=v] = v₂（値への代入）
+    cpsSubst  e₁ v e₂ : e₁[x:=v] = e₂（項への代入）
+    cpsSubstC k₁ v k₂ : k₁[x:=v] = k₂（継続への代入）
+  代入される側の v₁, e₁, k₁ は、
+  「変数を受け取って項を返す Agda の関数」λ x → ... で表し、
+  その x が代入される変数になる。
+-}
+
 mutual
+  -- v₁[x:=v] = v₂
   data cpsSubstV {var : cpstyp → Set} : {τ τ₁ : cpstyp} →
                  (var τ → cpsvalue[ var ] τ₁) →
                  cpsvalue[ var ] τ →
@@ -132,6 +223,7 @@ mutual
             cpsSubstV (λ _ → CPSShift {τ₁ = τ₁} {τ₂} {τ₃} {τ₄} {τ₅})
                       v CPSShift
 
+  -- e₁[x:=v] = e₂
   data cpsSubst {var : cpstyp → Set} : {τ₁ τ₂ : cpstyp} {Δ : conttyp} →
                 (var τ₁ → cpsterm[ var , Δ ] τ₂) →
                 cpsvalue[ var ] τ₁ →
@@ -178,11 +270,13 @@ mutual
             cpsSubstC k₁ v k₂ → cpsSubst e₁ v e₂ →
             cpsSubst (λ y → CPSRetE (k₁ y) (e₁ y)) v (CPSRetE k₂ e₂)
 
+  -- k₁[x:=v] = k₂
   data cpsSubstC {var : cpstyp → Set} :
                  {τ τ₁ τ₂ : cpstyp} → {Δ : conttyp} →
                  (var τ → cpscont[ var , Δ , τ₁ ] τ₂) →
                  cpsvalue[ var ] τ →
                  cpscont[ var , Δ , τ₁ ] τ₂ → Set where
+    -- k と λx.x には変数 x が現れないので、代入しても変わらない。
     sKVar≠ : {τ τ₁ τ₂ : cpstyp} →
              {v : cpsvalue[ var ] τ} →
              cpsSubstC {τ₁ = τ₁} {τ₂} (λ _ → CPSKVar) v CPSKVar
@@ -196,8 +290,19 @@ mutual
              ((x : var τ₁) → cpsSubst (λ y → (e₁ y) x) v (e₂ x)) →
              cpsSubstC (λ y → CPSKLet (e₁ y)) v (CPSKLet e₂)
 
--- 継続の代入規則
+{-
+  ----------------------------------------------------------------------------
+  継続の代入 Mk[k:=KΔ]
+  ----------------------------------------------------------------------------
+    cpsSubst₂  e₁ c e₂ : e₁[k:=c] = e₂（項への代入）
+    cpsSubstC₂ k₁ c k₂ : k₁[k:=c] = k₂（継続への代入）
+  代入される側は、k を使う項（Δ = K α ⇒ β）でなければならない。
+  値の中の k は、λx.λk. で束縛された別の k なので、
+  値への代入は不要（論文 p.17 を参照）。
+-}
+
 mutual
+  -- e₁[k:=c] = e₂
   data cpsSubst₂ {var : cpstyp → Set} :
                  {τ₁ α β : cpstyp} → {Δ : conttyp} →
                  cpsterm[ var , K α ⇒ β ] τ₁ → -- has to be K
@@ -234,6 +339,7 @@ mutual
             cpsSubstC₂ k₁ c k₂ →
             cpsSubst₂ (CPSRetE k₁ e) c (CPSRetE k₂ e)
 
+  -- k₁[k:=c] = k₂
   data cpsSubstC₂ {var : cpstyp → Set} :
                   {τ₁ τ₂ α β : cpstyp} → {Δ : conttyp} →
                   cpscont[ var , K α ⇒ β , τ₁ ] τ₂ →
@@ -249,13 +355,36 @@ mutual
              ((x : var τ₁) → cpsSubst₂ (e₁ x) c (e₂ x)) →
              cpsSubstC₂ (CPSKLet e₁) c (CPSKLet e₂)
 
---reduction rules
+{-
+  ----------------------------------------------------------------------------
+  簡約規則 (p.5, 図 3)
+  ----------------------------------------------------------------------------
+  項・値・継続それぞれについて簡約関係を定義し、相互再帰にしている。
+    cpsReduce  e e′ : 項の簡約
+    cpsReduceV v v′ : 値の簡約
+    cpsReduceC k k′ : 継続の簡約
+  DSterm.agda と同じく、1 ステップの簡約規則だけでなく、次の規則もまとめて定義している。
+    ・合同規則 (congruence rules)    : 部分項が簡約できれば、それを含む項も簡約できる。
+    ・反射律 RId (closure rules)     : 0 ステップの簡約。
+    ・推移律 RTrans (closure rules)  : 簡約を 2 つつなげる。
+  そのため、cpsReduce e e′ などは 0 ステップ以上の簡約 (⟶*) を表す。
+  論文の規則と、定義されている場所の対応:
+    (β.v), (β.let), (β.S), (β.R) : cpsReduce
+    (η.v)                        : cpsReduceV
+    (η.let)                      : cpsReduceC
+  CPS 言語ではもともとすべての部分式に名前が付いているので、
+  (let.1), (let.2), (assoc) に対応する規則は無い（論文 p.6）。
+  DStermK.agda の ReduceK などと、規則が一対一に対応している。
+-}
+
 mutual
   data cpsReduce {var : cpstyp → Set} :
                  {τ₁ : cpstyp} → {Δ : conttyp} →
                  cpsterm[ var , Δ ] τ₁ →
                  cpsterm[ var , Δ ] τ₁ → Set where
-     -- (λx.λk.M) V K -> M[x:=V][k:=K]
+     -- (β.v) (λx.λk.M) V K -> M[x:=V][k:=K]
+     -- 値の代入 cpsSubst と、継続の代入 cpsSubst₂ を順に行う。
+     -- 引数の代入と継続の代入が同時に行われる（論文 p.6）。
      RBetaV  : {τ₁ τ₂ τ₃ τ₄ : cpstyp} → {Δ : conttyp} →
                {e₁ : var τ₂ → cpsterm[ var , K τ₁ ⇒ τ₃ ] τ₄} →
                {v : cpsvalue[ var ] τ₂} →
@@ -266,14 +395,16 @@ mutual
                cpsSubst₂ e₁′ c e₂ →
                cpsReduce (CPSApp (CPSFun (λ x → e₁ x)) v c)
                          e₂
-     -- (λx.M) V -> M[x:=V]
+     -- (β.let) (λx.M) V -> M[x:=V]
+     -- 継続 λx.M に値 V を渡したら、x に代入する。
      RBetaLet : {τ₁ τ₂ : cpstyp} → {Δ : conttyp} →
                {e : var τ₁ → cpsterm[ var , Δ ] τ₂} →
                {v : cpsvalue[ var ] τ₁} →
                {e′ : cpsterm[ var , Δ ] τ₂} →
                cpsSubst e v e′ →
                cpsReduce (CPSRet (CPSKLet e) v) e′
-     -- K (S@V@J) -> K (V@(λy.λk.k@(J@y))@(λx.x))
+     -- (β.S) K (S V J) -> K (V (λy.λk.k (J y)) (λx.x))
+     -- j は恒等継続の下にある継続（Δ = • τ₄）。
      RShift  : {τ₁ τ₂ τ₃ τ₄ τ₅ τ₆ : cpstyp} → {Δ : conttyp} →
                {v : cpsvalue[ var ]
                     ((τ₁ ⇒[ τ₂ ⇒ τ₃ ]⇒ τ₃) ⇒[ τ₄ ⇒ τ₄ ]⇒ τ₅)} →
@@ -284,7 +415,8 @@ mutual
                                        (CPSFun (λ y →
                                          CPSRetE CPSKVar (CPSRet j (CPSVar y))))
                                        CPSKId))
-     -- K (S@V@J) -> K (V@(λy.λk.k@(J@y))@(λx.x))
+     -- K ((Sk.M) J) -> K ((λk.M) (λy.λk.k (J y)) (λx.x))
+     -- 論文には無い、CPSShift2 版の (β.S)。
      RShift2 : {τ₁ τ₂ τ₃ τ₄ τ₅ τ₆ : cpstyp} → {Δ : conttyp} →
                {e : var (τ₁ ⇒[ τ₂ ⇒ τ₃ ]⇒ τ₃) →
                     cpsterm[ var , K τ₄ ⇒ τ₄ ] τ₅} →
@@ -295,7 +427,8 @@ mutual
                                        (CPSFun (λ y →
                                          CPSRetE CPSKVar (CPSRet j (CPSVar y))))
                                        CPSKId))
-     -- K ((λx.x) V) -> K V
+     -- (β.R) K ((λx.x) V) -> K V
+     -- reset の中身が (λx.x) V になったら reset を外す。
      RReset  : {τ₁ τ₂ : cpstyp} → {Δ : conttyp} →
                {v : cpsvalue[ var ] τ₁} →
                {k : cpscont[ var , Δ , τ₁ ] τ₂} →
@@ -303,6 +436,8 @@ mutual
                          (CPSRet k v)
 
      -- congruence rules
+     -- 部分項（値・継続・reset の中身・λ の本体など）が簡約できれば、
+     -- それを含む項も簡約できる、という規則。
      RRet₁   : {τ₁ τ₂ : cpstyp} → {Δ : conttyp} →
                {k k' : cpscont[ var , Δ , τ₁ ] τ₂} →
                {v : cpsvalue[ var ] τ₁} →
@@ -375,7 +510,10 @@ mutual
                   {τ₁ : cpstyp} →
                   cpsvalue[ var ] τ₁ →
                   cpsvalue[ var ] τ₁ → Set where
-     -- λx.λk.V x k -> V
+     -- (η.v) λx.λk.V x k -> V
+     -- 受け取った値 x と継続 k を、そのまま V に渡すだけの関数は、V 自身に簡約できる。
+     -- （論文の条件 x ∉ fv(V) は、V が λ x → の外側で与えられていて、
+     -- V の中に x が現れようがないことで、自動的に満たされている。）
      REtaV   : {τ₀ τ₁ τ₃ τ₄ : cpstyp} →
                (v : cpsvalue[ var ] (τ₀ ⇒[ τ₁ ⇒ τ₃ ]⇒ τ₄)) →
                cpsReduceV (CPSFun (λ x → CPSApp v (CPSVar x) CPSKVar)) v
@@ -398,7 +536,10 @@ mutual
                   {τ₁ τ₂ : cpstyp} → {Δ : conttyp} →
                   cpscont[ var , Δ , τ₁ ] τ₂ →
                   cpscont[ var , Δ , τ₁ ] τ₂ → Set where
-     -- (λx.K x) -> K
+     -- (η.let) (λx.K x) -> K
+     -- 受け取った値 x をそのまま K に渡すだけの継続は、K 自身に簡約できる。
+     -- （論文の条件 x ∉ fv(K) は、K が λ x → の外側で与えられていて、
+     -- K の中に x が現れようがないことで、自動的に満たされている。）
      REtaLet : {τ₁ τ₂ : cpstyp} → {Δ : conttyp} →
                (k : cpscont[ var , Δ , τ₁ ] τ₂) →
                cpsReduceC (CPSKLet (λ x → CPSRet k (CPSVar x))) k
@@ -418,7 +559,14 @@ mutual
                cpsReduceC k₂ k₃ →
                cpsReduceC k₁ k₃
 
--- equational reasoning
+{-
+  ----------------------------------------------------------------------------
+  簡約の等式推論用の記法
+  ----------------------------------------------------------------------------
+  DSterm.agda の Reasoning と同じもの。
+  他のファイルからは CPSterm.Reasoning として open して使う。
+-}
+
 module Reasoning where
 
   open import Relation.Binary.PropositionalEquality
@@ -447,7 +595,15 @@ module Reasoning where
        (e : cpsterm[ var , Δ ] τ₁) → cpsReduce e e
   _∎ e = RId
 
--- lemma
+{-
+  ----------------------------------------------------------------------------
+  代入に関する補題
+  ----------------------------------------------------------------------------
+  代入される変数が現れない場合、代入しても何も変わらない、という補題。
+  つまり、x が現れない v₁, e₁, k₁ について、
+  v₁[x:=v] = v₁、e₁[x:=v] = e₁、k₁[x:=v] = k₁ が成り立つ。
+-}
+
 mutual
   cpsSubstV≠ : {var : cpstyp → Set} {τ₁ τ : cpstyp} →
                (v₁ : cpsvalue[ var ] τ₁) →

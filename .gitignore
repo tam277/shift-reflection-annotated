@@ -8,3 +8,6 @@ MAlonzo/
 *~
 \#*\#
 .\#*
+
+# Generated HTML (agda --html)
+html/

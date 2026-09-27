@@ -1,3 +1,17 @@
+{-
+  ============================================================================
+  DSKernel 項と CPS 項の間の Order Isomorphism (2)  (論文 3 節, 付録 A.2)
+  ============================================================================
+  CPS 言語の項を DS 変換してから CPS 変換すると、元の項に戻ることを示す。
+  論文の 定理 8 にあたる。
+    correctV  : 任意の値 V について       V♮†′ = V        （cpsV (dsV v) ≡ v）
+    correct   : 任意の項 MΔ について     (MΔ)♯° = MΔ     （cpsE (dsE e) ≡ e）
+    correctC  : 任意の継続 KΔ について   (KΔ)♭‡ = KΔ     （cpsC (dsC k) ≡ k）
+  証明は V, MΔ, KΔ についての相互帰納法。
+  Reflect1b.agda と対になっていて、λ 抽象の場合は関数の外延性の公理を使う。
+  ============================================================================
+-}
+
 {-# OPTIONS --rewriting #-}
 
 module Reflect2a where
@@ -12,7 +26,6 @@ open import Relation.Binary.PropositionalEquality
 
 open import Extensionality
 
--- main theorem
 
 mutual
   correctV : {var : typK → Set} → {τ₁ : cpstyp} →

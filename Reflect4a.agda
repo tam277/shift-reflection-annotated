@@ -1,3 +1,16 @@
+{-
+  ============================================================================
+  DSKernel 項と CPS 項の間の Order Isomorphism (4)  (論文 3 節, 付録 A.4)
+  ============================================================================
+  CPS 言語の簡約が、DS 変換した後の DSKernel 言語の簡約で保たれることを示す。
+  論文の 定理 14 にあたる。Reflect3b.agda と逆向きで、証明の形も同じ。
+    correctVK : 任意の値 V, W について       V ⟶* W ならば V♮ ⟶* W♮
+    correctK  : 任意の項 M, N について       M ⟶* N ならば M♯ ⟶* N♯
+    correctCK : 任意の継続 JΔ, KΔ について JΔ ⟶* KΔ ならば (JΔ)♭ ⟶* (KΔ)♭
+  そのために、まず代入補題を示している。
+  ============================================================================
+-}
+
 {-# OPTIONS --rewriting #-}
 
 module Reflect4a where
@@ -10,7 +23,17 @@ open import Data.Product
 open import Function
 open import Relation.Binary.PropositionalEquality
 
--- substitution lemma
+{-
+  ----------------------------------------------------------------------------
+  値の代入補題 (論文 補題 12)
+  ----------------------------------------------------------------------------
+  代入してから DS 変換しても、DS 変換してから代入しても同じになる。
+    lemma-cpsSubstV : (W[x:=V])♮ = W♮[x:=V♮]
+    lemma-cpsSubst  : (M[x:=V])♯ = M♯[x:=V♮]
+    lemma-cpsSubstC : (KΔ[x:=V])♭ = (KΔ)♭[x:=V♮]
+  いずれも代入関係として述べていて、証明は代入関係についての相互帰納法。
+-}
+
 mutual
   lemma-cpsSubstV : {var : typK → Set} {τ₁ τ₂ : cpstyp} →
                     {v : cpsvalue[ var ∘ dsT ] τ₂} →
@@ -50,6 +73,14 @@ mutual
   lemma-cpsSubstC sKId = sKId
   lemma-cpsSubstC (sKLet sub) = sKLet (λ x → lemma-cpsSubst (sub x))
 
+{-
+  ----------------------------------------------------------------------------
+  継続の代入補題 (論文 補題 13)
+  ----------------------------------------------------------------------------
+    lemma-cpsSubst₂  : (Mk[k:=JΔ])♯ = (Mk)♯[k:=(JΔ)♭]
+    lemma-cpsSubstC₂ : (Kk[k:=JΔ])♭ = (Kk)♭[k:=(JΔ)♭]
+-}
+
 mutual
   lemma-cpsSubst₂ : {var : typK → Set} {τ₁ τ₂ τ₄ : cpstyp} {Δ : conttyp} →
                     {e₁ : cpsterm[ var ∘ dsT , K τ₂ ⇒ τ₄ ] τ₁} →
@@ -72,7 +103,14 @@ mutual
   lemma-cpsSubstC₂ sKVar= = sKVar=
   lemma-cpsSubstC₂ (sKLet sub) = sKLet (λ x → lemma-cpsSubst₂ (sub x))
 
--- main theorem
+{-
+  ----------------------------------------------------------------------------
+  主定理 (論文 定理 14)
+  ----------------------------------------------------------------------------
+  簡約 cpsReduceV, cpsReduce, cpsReduceC についての相互帰納法。
+  各簡約規則を、DStermK.agda の同じ名前の簡約規則に置き換えている。
+-}
+
 mutual
   correctVK : {var : typK → Set} {τ₁ : cpstyp}
               {v v' : cpsvalue[ var ∘ dsT ] τ₁}

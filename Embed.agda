@@ -1,3 +1,21 @@
+{-
+  ============================================================================
+  DS 言語と DSKernel 言語の間の変換 (論文 4 節)
+  ============================================================================
+  次の 2 つの変換を定義するファイル。
+    ・埋め込み (embedding)   DSKernel 言語 → DS 言語   (論文 p.12, 図 8)
+    ・A-正規形変換 (knormal) DS 言語 → DSKernel 言語   (論文 p.11, 図 7)
+  論文の記法との対応:
+    embedV v    : V⊙           （値の埋め込み）
+    embed e     : M⊕           （項の埋め込み）
+    embedC k    : (KΔ)⊖         （コンテキストの埋め込み）
+    knormalV v  : V††          （値の A-正規形変換）
+    knormal e k : M :: KΔ     （項 M を、コンテキスト KΔ の下で A-正規形変換）
+  最後に、型の変換どうしが逆になっていることを示し、
+  REWRITE 規則として登録している。
+  ============================================================================
+-}
+
 {-# OPTIONS --rewriting #-}
 
 module Embed where
@@ -10,7 +28,19 @@ open import Relation.Binary.PropositionalEquality
 open import DStermK
 open import DSterm
 
--- Embedding kernel term to source term
+{-
+  ----------------------------------------------------------------------------
+  埋め込み (p.12, 図 8)
+  ----------------------------------------------------------------------------
+  DSKernel 言語は DS 言語の一部とみなせるので、その項を DS 言語の項に戻す変換。
+  DSKernel 言語の項 KΔ[...] は、DS 言語のコンテキスト (KΔ)⊖ に plug する形で埋め込む。
+  DS 言語のコンテキストを inside-out で定義しているのは、
+  この埋め込みを自然に定義できるようにするため（論文 p.11）。
+
+  型の埋め込み embedT は、型の形をそのまま保つ。
+  継続の型 embedContT では、K τ₁ ▷ τ₂ も • τ も DS 言語の τ₁ ▷ τ₂ の形になる。
+  （• τ は τ ▷ τ になる。）
+-}
 
 embedT : typK → typ
 embedT Nat = Nat
@@ -25,30 +55,40 @@ mutual
   embedV : {var : typ → Set} {τ : typK} →
            valueK[ var ∘ embedT ] τ →
            value[ var ] embedT τ
+  -- x⊙ = x
   embedV (Var x) = Var x
   embedV (Num n) = Num n
+  -- (λx.Mk)⊙ = λx.(Mk)⊕
   embedV (Fun e) = Fun (λ x → embed (e x))
+  -- S⊙ = S
   embedV Shift = Shift
 
   embed : {var : typ → Set} {τ : typK} {Δ : conttypK} →
           termK[ var ∘ embedT , Δ ] τ →
           term[ var , embedContT Δ ] embedT τ
+  -- (KΔ[V])⊕ = (KΔ)⊖[V⊙]
   embed (Ret k v) =
     plug (embedC k) (Val (embedV v))
+  -- (KΔ[V W])⊕ = (KΔ)⊖[V⊙ W⊙]
   embed (App v w k) =
     plug (embedC k)
          (NonVal (App (Val (embedV v)) (Val (embedV w))))
+  -- (KΔ[Sk.M])⊕ = (KΔ)⊖[Sk.M⊕]（論文には無い）
   embed (Shift2 e k) =
     plug (embedC k)
          (NonVal (Shift2 (λ k → embed (e k))))
+  -- (KΔ[<M•>])⊕ = (KΔ)⊖[<(M•)⊕>]
   embed (RetE {τ} k e) =
     plug (embedC k) (NonVal (Reset (embed e)))
 
   embedC : {var : typ → Set} {τ₃ τ₄ : typK} {Δ : conttypK} →
            pcontextK[ var ∘ embedT , Δ , τ₃ ] τ₄ →
            pcontext[ var , embedContT Δ , embedT τ₃ ] embedT τ₄
+  -- ([]k)⊖ = []k
   embedC KVar = Hole
+  -- ([]•)⊖ = []•
   embedC KId = Hole
+  -- (let x = [] in NΔ)⊖ = let x = [] in (NΔ)⊕
   embedC {Δ = K τ₁ ▷ τ₂} (KLet e) = Let Hole (λ x → embed (e x))
   embedC {Δ = • τ} (KLet e) = Let Hole (λ x → embed (e x))
 
@@ -130,7 +170,20 @@ Fun (λ x → Val (Fun (λ y →
               (λ n → NonVal (App (Val (Var y)) (Val (Var n))))))))
 -}
 
--- K-normal transformation to kernel term
+{-
+  ----------------------------------------------------------------------------
+  A-正規形変換 (p.11, 図 7)
+  ----------------------------------------------------------------------------
+  DS 言語の項を、すべての値でない部分式に名前を付けた DSKernel 言語の項に変換する。
+  コロン変換を使って値でない項を分解しつつ、継続を let 文の in 以下に移すことで、
+  フラットな let 文にしている（論文 p.10）。
+  knormal e k が論文の e :: k（e を、コンテキスト k の下で変換する）にあたる。
+  k は DSKernel 言語のコンテキストで、変換結果の項は k の穴に結果を渡す形になる。
+
+  DSKernel 言語の項には直接現れない Δ の情報を、k の型で引き回しているのがポイント。
+  これにより、例えば k = []Δ のときに、全体の型を正しく判断できる（論文 p.10）。
+  なお、knormalContT は DS 言語の継続の型を、常に K τ₁ ▷ τ₂ の形に変換する。
+-}
 
 knormalT : typ → typK
 knormalT Nat = Nat
@@ -142,6 +195,7 @@ knormalContT (τ₁ ▷ τ₂) = K knormalT τ₁ ▷ knormalT τ₂
 
 mutual
   -- value
+  -- (λx.M)†† = λx.(M :: []k)
   knormalV : {var : typK → Set} → {τ₁ : typ} →
              value[ var ∘ knormalT ] τ₁ →
              valueK[ var ] knormalT τ₁
@@ -157,43 +211,52 @@ mutual
             pcontextK[ var , Δ , knormalT τ₁ ] knormalT τ₂ →
             termK[ var , Δ ] (knormalT τ₃)
 
-  -- V : K
+  -- V :: K = K[V††]
   knormal (Val v) k = Ret k (knormalV v)
 
-  -- P Q : K
+  -- (P Q) :: K = P :: (let x = [] in (Q :: (let y = [] in K[x y])))
   knormal (NonVal (App (NonVal e₁) (NonVal e₂))) k =
     knormal (NonVal e₁) (KLet (λ m →
       knormal (NonVal e₂) (KLet (λ n →
         App (Var m) (Var n) k))))
 
-  -- P W : K
+  -- (P W) :: K = P :: (let x = [] in K[x W††])
   knormal (NonVal (App (NonVal e₁) (Val v₂))) k =
     knormal (NonVal e₁) (KLet (λ m →
       App (Var m) (knormalV v₂) k))
 
-  -- V Q : K
+  -- (V Q) :: K = Q :: (let y = [] in K[V†† y])
   knormal (NonVal (App (Val v₁) (NonVal e₂))) k =
     knormal (NonVal e₂) (KLet (λ n →
       App (knormalV v₁) (Var n) k))
 
-  -- V W : K
+  -- (V W) :: K = K[V†† W††]
   knormal (NonVal (App (Val v₁) (Val v₂))) k =
     App (knormalV v₁) (knormalV v₂) k
 
   -- Sk.M : K
+  -- 論文には無い。本体 M は []k の下で変換する。
   knormal (NonVal (Shift2 e)) k =
     Shift2 (λ k → knormal (e k) KVar) k
 
-  -- ⟨ M ⟩ : K
+  -- <M> :: K = K[<M :: []•>]
+  -- reset の中身は、恒等継続 []• の下で変換する。
   knormal (NonVal (Reset e)) k =
     RetE k (knormal e KId)
 
-  -- let x = M in N : K
+  -- (let x = M in N) :: K = M :: (let x = [] in (N :: K))
   knormal (NonVal (Let e₁ e₂)) k =
     knormal e₁ (KLet (λ m →
       knormal (e₂ m) k))
 
--- examples
+{-
+  ----------------------------------------------------------------------------
+  A-正規形変換の例
+  ----------------------------------------------------------------------------
+  DSterm.agda の例を変換したもの。
+  各例の下のコメントは、変換結果の項。
+-}
+
 test1 : {var : typK → Set} → {τ₁ τ₂ : typ} →
         valueK[ var ] (knormalT (τ₁ ⇒ τ₁ cps[ τ₂ , τ₂ ]))
 test1 = knormalV DSterm.val1
@@ -209,7 +272,18 @@ test3 : {var : typK → Set} → {τ₁ τ₂ τ₃ τ : typ} →
 test3 {τ = τ} = knormalV (DSterm.val3 {τ = τ})
 -- λ {τ} → Fun (λ x → App Shift (Fun (λ x₁ → Ret KVar (Var x))) KVar)
 
--- for REWRITE
+{-
+  ----------------------------------------------------------------------------
+  型の変換についての REWRITE 規則
+  ----------------------------------------------------------------------------
+  knormalT と embedT が互いに逆の変換であることを示し、
+  REWRITE プラグマで、書き換え規則として登録している。
+  登録すると、Agda が型検査のときに knormalT (embedT τ) を自動的に τ に書き換える。
+  これにより、例えば var ∘ knormalT ∘ embedT と var が同じものとして扱われ、
+  変換を組み合わせたときに、型を合わせるための変形を毎回書かずに済む。
+  （REWRITE を使うには、ファイル先頭の OPTIONS --rewriting が必要。）
+-}
+
 open import Agda.Builtin.Equality
 open import Agda.Builtin.Equality.Rewrite
 

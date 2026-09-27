@@ -1,3 +1,25 @@
+{-
+  ============================================================================
+  DS 項と CPS 項の間の Reflection (3)  (論文 5 節, 付録 C)
+  ============================================================================
+  DS 言語の簡約が、CPS 変換した後の CPS 言語の簡約で保たれる
+  (M ⟶ M′ ならば M* ⟶* M′*) ことを示す。論文の 系 30 にあたる。
+  このファイルには、2 通りの証明が入っている。
+
+  1. コロン変換 (CPSColonTrans.agda の cpsE𝑐) を使った直接の証明
+       correctV : 値 v, v′ について v ⟶* v′ ならば v† ⟶* v′†
+       correct  : 項 e, e′ と CPS 言語の継続 k について
+                  e ⟶* e′ ならば e : k ⟶* e′ : k
+     証明の構成は Reflect3a.agda とまったく同じで、
+     DSKernel 言語の代わりに CPS 言語の項を直接扱っている。
+
+  2. Reflect3a.agda と Reflect3b.agda を合成した証明（ファイルの最後）
+       correctV' : v ⟶* v′ ならば (v††)†′ ⟶* (v′††)†′
+       correct'  : e ⟶* e′ ならば (e :: k♭)° ⟶* (e′ :: k♭)°
+     論文の 系 30 の形は、こちらの方。
+  ============================================================================
+-}
+
 {-# OPTIONS --rewriting #-}
 
 module Reflect3 where
@@ -10,7 +32,17 @@ open import Data.Product
 open import Function
 open import Relation.Binary.PropositionalEquality
 
--- substitution lemma
+{-
+  ----------------------------------------------------------------------------
+  値の代入補題
+  ----------------------------------------------------------------------------
+  代入してから CPS 変換しても、CPS 変換してから代入しても同じになる。
+    lemma-substV : W[x:=V] = W′ ならば W†[x:=V†] = W′†
+    lemma-subst  : M[x:=V] = M′ かつ k[x:=V†] = k′ ならば
+                   (M : k)[x:=V†] = M′ : k′
+  Reflect3a.agda の lemma-substV, lemma-subst の CPS 版。
+-}
+
 mutual
   lemma-substV : {var : cpstyp → Set} {τ τ₁ : typ} →
                  {v₁ : (var ∘ cpsT) τ → value[ var ∘ cpsT ] τ₁}
@@ -75,6 +107,14 @@ mutual
                 (CPSKLet (λ m → cpsE𝑐 (e₂′ m) k′)) sub-e₂
                 (sKLet (λ x → lemma-subst k k′ (sub-e₁ x) sub-k))
 
+{-
+  ----------------------------------------------------------------------------
+  継続の代入補題
+  ----------------------------------------------------------------------------
+  M : (k[k:=c]) = (M : k)[k:=c]
+  Reflect3a.agda の lemma-subst₂ の CPS 版。
+-}
+
 mutual
   lemma-subst₂ : {var : cpstyp → Set}
                  {τ₁ τ₂ τ₃ α β : typ} {Δ : conttyp} →
@@ -102,7 +142,14 @@ mutual
   lemma-subst₂ {e = NonVal (Let e₁ e₂)} k k′ sub-k =
     lemma-subst₂ {e = e₁} _ _ (sKLet (λ x → lemma-subst₂ {e = e₂ x} _ _ sub-k))
 
--- lemma
+{-
+  ----------------------------------------------------------------------------
+  継続の簡約補題
+  ----------------------------------------------------------------------------
+  k ⟶* k′ ならば M : k ⟶* M : k′
+  Reflect3a.agda の reduceK の CPS 版。
+-}
+
 reduceK : {var : cpstyp → Set} {τ₁ τ₂ τ₃ : typ} {Δ : conttyp} →
           (e : term[ var ∘ cpsT , τ₁ ▷ τ₂ ] τ₃) →
           (k k' : cpscont[ var , Δ , cpsT τ₁ ] cpsT τ₂) →
@@ -165,6 +212,17 @@ reduceK (NonVal (Let e₁ e₂)) k k' red = begin
     (cpsE𝑐 (NonVal (Let e₁ e₂)) k')
   ∎ where open CPSterm.Reasoning
 
+{-
+  ----------------------------------------------------------------------------
+  shift 用の補題
+  ----------------------------------------------------------------------------
+  DS 言語の pure なコンテキスト J と CPS 言語の継続 k について、
+  次の 2 つを満たす CPS 言語の継続 j′ が存在する。
+    ・任意の非値 P について        J[P] : k = P : j′
+    ・任意の値 V について          V : j′ ⟶* J[V] : k
+  Reflect3a.agda の contExist（論文 補題 21）の CPS 版。
+-}
+
 contExist : {var : cpstyp → Set} {τ₁ τ₂ τ₆ : typ} {Δ : conttyp} →
             (j : pcontext[ var ∘ cpsT , τ₆ ▷ τ₆ , τ₁ ] τ₂)
             (k : cpscont[ var , Δ , cpsT τ₆ ] cpsT τ₆) →
@@ -223,6 +281,17 @@ contExist (Let j e) k with contExist j k
   ≡⟨ sym (eq (Let (Val v) e)) ⟩
     cpsE𝑐 (plug j (NonVal (Let (Val v) e))) k
   ∎) where open CPSterm.Reasoning
+
+{-
+  ----------------------------------------------------------------------------
+  (β.S) の場合
+  ----------------------------------------------------------------------------
+  DS 言語の <J[S V]> ⟶ <V (λy.<J[y]>)> が、
+  CPS 変換した後でも CPS 言語の簡約で表せることを示す。
+  contExist で得た j′ を使って、CPS 言語の (β.S) を適用し、
+  その後、λ の中の j′ y を J[y] : λx.x に戻している。
+  reduceShift2 は、論文には無い Sk.M 版。
+-}
 
 reduceShift : {var : cpstyp → Set} {τ₁ τ₂ τ₃ τ₄ τ₅ τ₆ : typ} {Δ : conttyp}
               (k : cpscont[ var , Δ , cpsT τ₁ ] cpsT τ₂)
@@ -286,7 +355,15 @@ reduceShift2 {var} k v j
         CPSKId)
   ∎ where open CPSterm.Reasoning
 
--- main theorem
+{-
+  ----------------------------------------------------------------------------
+  主定理（コロン変換を使った直接の証明）
+  ----------------------------------------------------------------------------
+  DS 言語の簡約規則 Reduce についての帰納法で証明する。
+  (assoc), (let.1), (let.2) の場合は、CPS 変換すると両辺が同じ項になるので RId で済む。
+  値から非値への簡約は reduceVal で起こりえないことを示し、() で場合を除いている。
+-}
+
 mutual
   correctV : {var : cpstyp → Set} → {τ₁ β : typ} →
              {v v′ : value[ var ∘ cpsT ] τ₁} →
@@ -526,7 +603,14 @@ mutual
       (cpsE𝑐 e₃ k)
     ∎ where open CPSterm.Reasoning
 
--- main theorem using Reflect3a, Reflect3b
+{-
+  ----------------------------------------------------------------------------
+  主定理（Reflect3a と Reflect3b を合成した証明、論文 系 30）
+  ----------------------------------------------------------------------------
+  DS 項と DSKernel 項の間の Reflection (3) (Reflect3a.agda, 定理 22) と、
+  DSKernel 項と CPS 項の間の Order Isomorphism (3) (Reflect3b.agda, 定理 11) を
+  そのまま合成している。
+-}
 
 open import Reflect3a
 open import Reflect3b

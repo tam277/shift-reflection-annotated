@@ -1,3 +1,21 @@
+{-
+  ============================================================================
+  DS 項と DSKernel 項の間の Reflection (3)  (論文 4 節, 付録 B.3)
+  ============================================================================
+  DS 言語の簡約が、A-正規形変換した後の DSKernel 言語の簡約で保たれることを示す。
+  論文の 定理 22 にあたる。
+    correctVE : 任意の値 V, W について、V ⟶* W ならば V†† ⟶* W††
+    correctE  : 任意の項 M, N と DSKernel 言語の継続 KΔ について、
+                M ⟶* N ならば M :: KΔ ⟶* N :: KΔ
+  そのために、次の補題を順に示している。
+    lemma-substV, lemma-subst : 値の代入補題      (論文 補題 18)
+    lemma-subst₂              : 継続の代入補題    (論文 補題 19)
+    reduceK                   : 継続の簡約補題    (論文 補題 20)
+    contExist                 : shift 用の補題    (論文 補題 21)
+    reduceShift, reduceShift2 : (β.S) の場合の証明
+  ============================================================================
+-}
+
 {-# OPTIONS --rewriting #-}
 
 module Reflect3a where
@@ -10,7 +28,18 @@ open import Data.Product
 open import Function
 open import Relation.Binary.PropositionalEquality
 
--- substitution lemma
+{-
+  ----------------------------------------------------------------------------
+  値の代入補題 (論文 補題 18)
+  ----------------------------------------------------------------------------
+  代入してから A-正規形変換しても、A-正規形変換してから代入しても同じになる。
+    lemma-substV : W[x:=V] = W′ ならば W††[x:=V††] = W′††
+    lemma-subst  : M[x:=V] = M′ かつ KΔ[x:=V††] = KΔ′ ならば
+                   (M :: KΔ)[x:=V††] = M′ :: KΔ′
+  証明は代入関係 (SubstV, Subst) についての相互帰納法。
+  いずれも代入関係として述べている（DSterm.agda の代入を参照）。
+-}
+
 mutual
   lemma-substV : {var : typK → Set} {τ τ₁ : typ} →
                  {v₁ : (var ∘ knormalT) τ → value[ var ∘ knormalT ] τ₁}
@@ -56,6 +85,16 @@ mutual
   lemma-subst (sNonVal (sLet sub-e₁ sub-e₂)) sub-k =
     lemma-subst sub-e₂ (sKLet (λ x → lemma-subst (sub-e₁ x) sub-k))
 
+{-
+  ----------------------------------------------------------------------------
+  継続の代入補題 (論文 補題 19)
+  ----------------------------------------------------------------------------
+  継続 Kk の k に JΔ を代入してから M を変換しても、
+  M を Kk の下で変換してから k に JΔ を代入しても同じになる。
+    M :: (Kk[k:=JΔ]) = (M :: Kk)[k:=JΔ]
+  証明は M についての帰納法。
+-}
+
 mutual
   lemma-subst₂ : {var : typK → Set}
                  {τ₁ τ₂ τ₃ : typ} {Δ : conttypK} {α β : typK} →
@@ -81,7 +120,14 @@ mutual
   lemma-subst₂ (NonVal (Let e₁ e₂)) sub-k =
     lemma-subst₂ e₁ (sKLet (λ x → lemma-subst₂ (e₂ x) sub-k))
 
--- lemma
+{-
+  ----------------------------------------------------------------------------
+  継続の簡約補題 (論文 補題 20)
+  ----------------------------------------------------------------------------
+  KΔ ⟶* KΔ′ ならば M :: KΔ ⟶* M :: KΔ′
+  証明は M についての帰納法。
+-}
+
 reduceK : {var : typK → Set} {τ₁ τ₂ τ₃ : typ} {Δ : conttypK} →
           (e : term[ var ∘ knormalT , τ₁ ▷ τ₂ ] τ₃) →
           {k k' : pcontextK[ var , Δ , knormalT τ₁ ] knormalT τ₂} →
@@ -100,6 +146,21 @@ reduceK (NonVal (Shift2 e)) red = RShift₁ red
 reduceK (NonVal (Reset e)) red = RRetE₁ red
 reduceK (NonVal (Let e₁ e₂)) red =
   reduceK e₁ (RKLet (λ x → reduceK (e₂ x) red))
+
+{-
+  ----------------------------------------------------------------------------
+  shift 用の補題 (論文 補題 21)
+  ----------------------------------------------------------------------------
+  DS 言語の pure なコンテキスト J と DSKernel 言語の継続 KΔ について、
+  次の 2 つを満たす DSKernel 言語の継続 ĴΔ (j′) が存在する。
+    ・任意の非値 P について        J[P] :: KΔ = P :: ĴΔ
+    ・任意の値 V について          V :: ĴΔ ⟶* J[V] :: KΔ
+  前半は、J を KΔ の方に押しやれることを表す。
+  後半は、P を実行した結果の V でその後の実行を続けた結果と、
+  元のコンテキスト J の下で実行を続けた結果が同じになることを表す。
+  (β.S) の場合、つまり P が shift で J がその周りのコンテキストの場合に使う（論文 p.12）。
+  証明は J についての帰納法で、Σ 型（存在）と × （かつ）で結果を返している。
+-}
 
 contExist : {var : typK → Set} {τ₁ τ₂ τ₆ : typ} {Δ : conttypK} →
             (j : pcontext[ var ∘ knormalT , τ₆ ▷ τ₆ , τ₁ ] τ₂)
@@ -149,6 +210,17 @@ contExist (Let j e) k with contExist j k
   ≡⟨ sym (eq (Let (Val v) e)) ⟩
     knormal (plug j (NonVal (Let (Val v) e))) k
   ∎) where open DStermK.Reasoning
+
+{-
+  ----------------------------------------------------------------------------
+  (β.S) の場合
+  ----------------------------------------------------------------------------
+  DS 言語の <J[S V]> ⟶ <V (λy.<J[y]>)> が、
+  A-正規形変換した後でも DSKernel 言語の簡約で表せることを示す。
+  contExist で得た Ĵ を使って、DSKernel 言語の (β.S) を適用し、
+  その後、λ の中の Ĵ[y] を J[y] に戻している。
+  reduceShift2 は、論文には無い Sk.M 版。
+-}
 
 reduceShift : {var : typK → Set} {τ₁ τ₃ τ₄ τ₅ τ₆ : typ}
               {τ₂  : typK} {Δ : conttypK}
@@ -204,7 +276,16 @@ reduceShift2 {var} {τ₁} {τ₂} {τ₃} {τ₄} {τ₅} k v j with contExist 
         (Fun (λ x → RetE KVar (knormal (plug j (Val (Var x))) KId))) KId))
   ∎ where open DStermK.Reasoning
 
--- main theorem
+{-
+  ----------------------------------------------------------------------------
+  主定理 (論文 定理 22)
+  ----------------------------------------------------------------------------
+  DS 言語の簡約規則 Reduce についての帰納法で証明する。
+  (assoc), (let.1), (let.2) の場合は、A-正規形変換すると両辺が同じ項になるので RId で済む。
+  A-正規形変換は、これらの規則で名前を付けた後の形を、最初から作っているからである。
+  値から非値への簡約は reduceVal で起こりえないことを示し、() で場合を除いている。
+-}
+
 mutual
   correctVE : {var : typK → Set} {τ₁ β : typ}
               {v v' : value[ var ∘ knormalT ] τ₁}

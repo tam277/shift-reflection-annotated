@@ -1,3 +1,19 @@
+{-
+  ============================================================================
+  DS 項と CPS 項の間の Reflection (4)  (論文 5 節, 付録 C)
+  ============================================================================
+  CPS 言語の簡約が、DS 変換した後の DS 言語の簡約で保たれる
+  (N ⟶ N′ ならば N# ⟶* N′#) ことを示す。論文の 系 31 にあたる。
+    correctV  : 任意の値 V, W について       V ⟶* W ならば V♮⊙ ⟶* W♮⊙
+    correct   : 任意の項 MΔ, NΔ について   MΔ ⟶* NΔ ならば (MΔ)♯⊕ ⟶* (NΔ)♯⊕
+    correctC  : 任意の継続 JΔ, KΔ について JΔ ⟶* KΔ ならば、
+                任意の DS 言語の項 M について (JΔ)♭⊖[M] ⟶* (KΔ)♭⊖[M]
+  DSKernel 項と CPS 項の間の Order Isomorphism (4) (Reflect4a.agda, 定理 14) と、
+  DS 項と DSKernel 項の間の Reflection (4) (Reflect4b.agda, 定理 27) を
+  そのまま合成している。
+  ============================================================================
+-}
+
 {-# OPTIONS --rewriting #-}
 
 module Reflect4 where
@@ -14,7 +30,6 @@ open import Data.Product
 open import Function
 open import Relation.Binary.PropositionalEquality
 
--- main theorem
 correctV : {var : typ → Set} {τ₁ : cpstyp} {τ : typ} →
            {v v′ : cpsvalue[ var ∘ embedT ∘ dsT ] τ₁} →
            cpsReduceV v v′ →
